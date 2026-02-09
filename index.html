@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Research Aggregator (Single File)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://esm.sh/@google/genai@0.1.1",
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.563.0"
+  }
+}
+</script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .tab-active { border-bottom: 2px solid #2563eb; color: #2563eb; }
+        .tab-inactive { border-bottom: 2px solid transparent; color: #6b7280; }
+        .tab-inactive:hover { color: #374151; border-color: #d1d5db; }
+        /* Markdown-like simple styling for Python code */
+        pre { background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900 min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div class="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div class="bg-blue-600 p-2 rounded-lg text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+                </div>
+                <h1 class="text-xl font-bold text-gray-800">Research Aggregator</h1>
+            </div>
+            <div class="flex items-center gap-3">
+                <button id="btn-show-python" class="text-sm text-gray-600 hover:text-blue-600 font-medium flex items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/></svg>
+                    Pythonコードを見る
+                </button>
+                <button id="btn-settings" class="p-2 text-gray-500 hover:text-gray-700">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+        <div class="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-xl">
+            <h2 class="text-lg font-bold mb-4">API設定</h2>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Google Gemini API Key</label>
+                <input type="password" id="api-key-input" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="AI StudioのAPIキーを入力">
+                <p class="text-xs text-gray-500 mt-1">キーはブラウザにのみ保存され、外部には送信されません。</p>
+            </div>
+            <div class="flex justify-end gap-2">
+                <button id="btn-close-settings" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">キャンセル</button>
+                <button id="btn-save-settings" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Python Code Modal -->
+    <div id="python-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+        <div class="bg-white rounded-xl max-w-4xl w-full mx-4 shadow-xl flex flex-col h-[80vh]">
+            <div class="p-4 border-b flex justify-between items-center">
+                <h2 class="text-lg font-bold flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/></svg>
+                    main.py
+                </h2>
+                <button id="btn-close-python" class="text-gray-500 hover:text-gray-700">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="flex-1 overflow-auto p-0 bg-[#1e1e1e]">
+                <pre id="python-code-content" class="text-sm font-mono m-0 h-full rounded-none"></pre>
+            </div>
+            <div class="p-4 border-t bg-gray-50 flex justify-end">
+                <button id="btn-copy-python" class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                    コードをコピー
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <main class="flex-1 max-w-5xl mx-auto w-full px-4 py-8">
+        <!-- Search Form -->
+        <div class="mb-8">
+            <form id="search-form" class="relative max-w-2xl mx-auto">
+                <div class="relative group">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <svg class="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                    </div>
+                    <input type="text" id="query-input" placeholder="調査したいトピックを入力 (例: 量子コンピュータ、生成AI)" 
+                        class="block w-full pl-12 pr-4 py-4 bg-white border border-gray-300 rounded-xl leading-5 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm text-lg transition-all" required>
+                    <button type="submit" id="search-btn" class="absolute right-2 top-2 bottom-2 bg-blue-600 text-white px-6 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                        検索
+                    </button>
+                </div>
+                <p class="mt-2 text-center text-sm text-gray-500">Google検索 (Gemini) と arXiv論文データベースを同時検索します。</p>
+            </form>
+        </div>
+
+        <!-- Main Content (Results) -->
+        <div id="results-container" class="hidden animate-fade-in">
+            <!-- Tabs & Download -->
+            <div class="flex flex-col sm:flex-row justify-between items-center border-b border-gray-200 mb-6 gap-4">
+                <div class="flex w-full sm:w-auto overflow-x-auto">
+                    <button id="tab-google" class="flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors whitespace-nowrap tab-active">
+                        Google検索
+                        <span id="count-google" class="ml-1 bg-gray-100 text-gray-600 py-0.5 px-2 rounded-full text-xs">0</span>
+                    </button>
+                    <button id="tab-arxiv" class="flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors whitespace-nowrap tab-inactive">
+                        arXiv論文
+                        <span id="count-arxiv" class="ml-1 bg-gray-100 text-gray-600 py-0.5 px-2 rounded-full text-xs">0</span>
+                    </button>
+                </div>
+                <button id="btn-download" class="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap w-full sm:w-auto justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    HTMLレポート作成
+                </button>
+            </div>
+
+            <!-- Loading State -->
+            <div id="loader" class="hidden flex-col items-center justify-center py-20 text-gray-500">
+                <svg class="animate-spin h-10 w-10 mb-4 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                <p>資料を収集中です...</p>
+            </div>
+
+            <!-- Results Lists -->
+            <div id="content-area">
+                <div id="list-google" class="grid gap-4"></div>
+                <div id="list-arxiv" class="grid gap-4 hidden"></div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="text-center py-8 text-gray-400 text-sm">
+        Generated by Research Aggregator Tool
+    </footer>
+
+    <!-- Application Logic -->
+    <script type="module">
+        import { GoogleGenAI } from "@google/genai";
+
+        // Global State
+        const state = {
+            apiKey: localStorage.getItem('gemini_api_key') || '',
+            results: { google: [], arxiv: [] },
+            query: ''
+        };
+
+        // DOM Elements
+        const els = {
+            queryInput: document.getElementById('query-input'),
+            searchForm: document.getElementById('search-form'),
+            searchBtn: document.getElementById('search-btn'),
+            resultsContainer: document.getElementById('results-container'),
+            loader: document.getElementById('loader'),
+            contentArea: document.getElementById('content-area'),
+            listGoogle: document.getElementById('list-google'),
+            listArxiv: document.getElementById('list-arxiv'),
+            tabGoogle: document.getElementById('tab-google'),
+            tabArxiv: document.getElementById('tab-arxiv'),
+            countGoogle: document.getElementById('count-google'),
+            countArxiv: document.getElementById('count-arxiv'),
+            btnDownload: document.getElementById('btn-download'),
+            btnSettings: document.getElementById('btn-settings'),
+            btnSaveSettings: document.getElementById('btn-save-settings'),
+            btnCloseSettings: document.getElementById('btn-close-settings'),
+            modalSettings: document.getElementById('settings-modal'),
+            apiKeyInput: document.getElementById('api-key-input'),
+            btnShowPython: document.getElementById('btn-show-python'),
+            modalPython: document.getElementById('python-modal'),
+            btnClosePython: document.getElementById('btn-close-python'),
+            pythonCodeContent: document.getElementById('python-code-content'),
+            btnCopyPython: document.getElementById('btn-copy-python')
+        };
+
+        // Initialize
+        if (state.apiKey) els.apiKeyInput.value = state.apiKey;
+        
+        // Functions
+        const toggleModal = (modal, show) => {
+            modal.classList.toggle('hidden', !show);
+        };
+
+        const switchTab = (tab) => {
+            if (tab === 'google') {
+                els.listGoogle.classList.remove('hidden');
+                els.listArxiv.classList.add('hidden');
+                els.tabGoogle.className = "flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors whitespace-nowrap tab-active";
+                els.tabArxiv.className = "flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors whitespace-nowrap tab-inactive";
+            } else {
+                els.listGoogle.classList.add('hidden');
+                els.listArxiv.classList.remove('hidden');
+                els.tabGoogle.className = "flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors whitespace-nowrap tab-inactive";
+                els.tabArxiv.className = "flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors whitespace-nowrap tab-active";
+            }
+        };
+
+        const renderCard = (item) => {
+            const authorsHtml = item.authors ? `<p class="text-sm text-gray-600 mt-1"><span class="font-medium text-gray-800">Authors:</span> ${item.authors.join(', ')}</p>` : '';
+            const dateHtml = item.publishedDate ? `<p class="text-xs text-gray-400 mt-1">Published: ${item.publishedDate}</p>` : '';
+            
+            return `
+            <div class="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow">
+                <div class="flex justify-between items-start gap-4">
+                    <div>
+                        <h3 class="text-lg font-semibold text-blue-700 leading-snug">
+                            <a href="${item.url}" target="_blank" rel="noopener noreferrer" class="hover:underline">${item.title}</a>
+                        </h3>
+                        ${authorsHtml}
+                        ${dateHtml}
+                        <div class="flex items-center gap-1 text-xs text-gray-400 mt-2 mb-3">
+                            <span class="truncate max-w-md">${item.url}</span>
+                        </div>
+                    </div>
+                </div>
+                <p class="text-gray-700 text-sm leading-relaxed line-clamp-3">${item.summary}</p>
+            </div>`;
+        };
+
+        const renderResults = () => {
+            els.listGoogle.innerHTML = state.results.google.length 
+                ? state.results.google.map(renderCard).join('') 
+                : '<div class="text-center py-10 text-gray-500">No results found via Google.</div>';
+            
+            els.listArxiv.innerHTML = state.results.arxiv.length 
+                ? state.results.arxiv.map(renderCard).join('') 
+                : '<div class="text-center py-10 text-gray-500">No papers found on arXiv.</div>';
+            
+            els.countGoogle.textContent = state.results.google.length;
+            els.countArxiv.textContent = state.results.arxiv.length;
+            
+            els.resultsContainer.classList.remove('hidden');
+            els.contentArea.classList.remove('hidden');
+            els.loader.classList.add('hidden');
+        };
+
+        // API Logic
+        const searchGoogle = async (query) => {
+            if (!state.apiKey) return [];
+            try {
+                const ai = new GoogleGenAI({ apiKey: state.apiKey });
+                const response = await ai.models.generateContent({
+                    model: "gemini-2.5-flash",
+                    contents: `Find 5 high-quality, relevant web pages or PDFs regarding: "${query}". Return the results as a list.`,
+                    config: { tools: [{ googleSearch: {} }] },
+                });
+                
+                const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+                if (!chunks) return [];
+
+                // Deduplicate and map
+                const results = chunks
+                    .filter(c => c.web?.uri && c.web?.title)
+                    .map((c, i) => ({
+                        id: `g-${i}`,
+                        title: c.web.title,
+                        url: c.web.uri,
+                        summary: "Source found via Google Search (Gemini Grounding).",
+                        source: 'google'
+                    }));
+                
+                return results.filter((item, index, self) =>
+                    index === self.findIndex((t) => t.url === item.url)
+                );
+            } catch (e) {
+                console.error("Google search error", e);
+                return [];
+            }
+        };
+
+        const searchArxiv = async (query) => {
+            try {
+                const url = `https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(query)}&start=0&max_results=8&sortBy=submittedDate&sortOrder=descending`;
+                const res = await fetch(url);
+                const text = await res.text();
+                const parser = new DOMParser();
+                const xml = parser.parseFromString(text, "text/xml");
+                const entries = xml.getElementsByTagName("entry");
+                
+                return Array.from(entries).map((entry, i) => {
+                    const title = entry.getElementsByTagName("title")[0]?.textContent?.trim().replace(/\n/g, " ") || "No Title";
+                    const summary = entry.getElementsByTagName("summary")[0]?.textContent?.trim().replace(/\n/g, " ") || "No Summary";
+                    const url = entry.getElementsByTagName("id")[0]?.textContent?.trim() || "";
+                    const published = entry.getElementsByTagName("published")[0]?.textContent?.substring(0, 10) || "";
+                    const authors = Array.from(entry.getElementsByTagName("author")).map(a => a.getElementsByTagName("name")[0]?.textContent);
+                    
+                    return { id: `a-${i}`, title, url, summary, authors, publishedDate: published, source: 'arxiv' };
+                });
+            } catch (e) {
+                console.error("arXiv error", e);
+                return [];
+            }
+        };
+
+        // Report Generation
+        const generateReport = () => {
+            const allResults = [...state.results.google, ...state.results.arxiv];
+            if (allResults.length === 0) return alert("出力するデータがありません");
+            
+            const html = `<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"><title>Research Report: ${state.query}</title>
+<style>body{font-family:sans-serif;max-width:800px;margin:2rem auto;line-height:1.6;color:#333}h1{border-bottom:2px solid #2563eb;color:#1e3a8a}h2{margin-top:2rem;color:#2563eb}.card{border:1px solid #ddd;padding:1rem;margin-bottom:1rem;border-radius:8px}a{color:#2563eb}</style>
+</head>
+<body>
+<h1>Research Report: ${state.query}</h1>
+<p>Generated: ${new Date().toLocaleDateString()}</p>
+<h2>Google Results</h2>
+${state.results.google.map(i => `<div class="card"><h3><a href="${i.url}">${i.title}</a></h3><p>${i.summary}</p><p><small>${i.url}</small></p></div>`).join('')}
+<h2>arXiv Papers</h2>
+${state.results.arxiv.map(i => `<div class="card"><h3><a href="${i.url}">${i.title}</a></h3><p><strong>Authors:</strong> ${i.authors?.join(', ')}</p><p>${i.summary}</p></div>`).join('')}
+</body></html>`;
+            
+            const blob = new Blob([html], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Report_${state.query}.html`;
+            a.click();
+            URL.revokeObjectURL(url);
+        };
+
+        // Event Listeners
+        els.searchForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const q = els.queryInput.value.trim();
+            if (!q) return;
+            
+            if (!state.apiKey) {
+                toggleModal(els.modalSettings, true);
+                return;
+            }
+
+            state.query = q;
+            els.searchBtn.disabled = true;
+            els.loader.classList.remove('hidden');
+            els.contentArea.classList.add('hidden');
+            els.resultsContainer.classList.remove('hidden');
+
+            const [googleData, arxivData] = await Promise.all([searchGoogle(q), searchArxiv(q)]);
+            state.results = { google: googleData, arxiv: arxivData };
+            
+            renderResults();
+            els.searchBtn.disabled = false;
+        });
+
+        els.tabGoogle.addEventListener('click', () => switchTab('google'));
+        els.tabArxiv.addEventListener('click', () => switchTab('arxiv'));
+        
+        els.btnSettings.addEventListener('click', () => toggleModal(els.modalSettings, true));
+        els.btnCloseSettings.addEventListener('click', () => toggleModal(els.modalSettings, false));
+        els.btnSaveSettings.addEventListener('click', () => {
+            const key = els.apiKeyInput.value.trim();
+            if (key) {
+                state.apiKey = key;
+                localStorage.setItem('gemini_api_key', key);
+                toggleModal(els.modalSettings, false);
+            }
+        });
+
+        els.btnDownload.addEventListener('click', generateReport);
+
+        // Python Code Display Logic
+        els.btnShowPython.addEventListener('click', async () => {
+            // Load content from main.py
+            try {
+                // In a real environment we would fetch, but here we'll define it or read it if available.
+                // Since we are creating main.py in the same XML response, we can't fetch it easily in this simulation.
+                // So we will embed the string here for display purposes.
+                const pythonCode = `import os
+import time
+import requests
+import xml.etree.ElementTree as ET
+from google import genai
+from google.genai import types
+
+# ==========================================
+# 設定エリア: APIキーを入力してください
+# ==========================================
+# Google Gemini API Key (https://aistudio.google.com/)
+GEMINI_API_KEY = "YOUR_API_KEY_HERE"
+# ==========================================
+
+class ResearchAggregator:
+    def __init__(self, api_key):
+        self.client = genai.Client(api_key=api_key)
+
+    def search_google(self, query):
+        """GeminiのGrounding機能を使ってWeb検索を行う"""
+        print(f"Searching Google for: {query}...")
+        try:
+            # Gemini 2.5 Flashモデルで検索ツールを使用
+            response = self.client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=f"Find 5 high-quality, relevant web pages or PDFs regarding: '{query}'. Return the results as a list.",
+                config=types.GenerateContentConfig(
+                    tools=[types.Tool(google_search=types.GoogleSearch())]
+                )
+            )
+            
+            results = []
+            # Grounding Metadataから検索結果を抽出
+            if response.candidates and response.candidates[0].grounding_metadata.grounding_chunks:
+                for chunk in response.candidates[0].grounding_metadata.grounding_chunks:
+                    if chunk.web and chunk.web.uri and chunk.web.title:
+                        results.append({
+                            "title": chunk.web.title,
+                            "url": chunk.web.uri,
+                            "summary": "Google Search Result (Gemini Grounding)",
+                            "source": "Google"
+                        })
+            
+            # URLで重複排除
+            unique_results = {r['url']: r for r in results}.values()
+            return list(unique_results)
+            
+        except Exception as e:
+            print(f"Error in Google Search: {e}")
+            return []
+
+    def search_arxiv(self, query):
+        """arXiv APIを使って論文を検索する"""
+        print(f"Searching arXiv for: {query}...")
+        time.sleep(1) # APIへの配慮
+        try:
+            url = f"http://export.arxiv.org/api/query?search_query=all:{query}&start=0&max_results=5&sortBy=submittedDate&sortOrder=descending"
+            response = requests.get(url)
+            
+            if response.status_code != 200:
+                print(f"arXiv API Error: {response.status_code}")
+                return []
+
+            root = ET.fromstring(response.content)
+            results = []
+            ns = {'atom': 'http://www.w3.org/2005/Atom'} # XML名前空間
+
+            for entry in root.findall('atom:entry', ns):
+                title = entry.find('atom:title', ns).text.replace('\\n', ' ').strip()
+                summary = entry.find('atom:summary', ns).text.replace('\\n', ' ').strip()
+                link = entry.find('atom:id', ns).text
+                
+                authors = []
+                for author in entry.findall('atom:author', ns):
+                    name = author.find('atom:name', ns).text
+                    authors.append(name)
+                
+                results.append({
+                    "title": title,
+                    "url": link,
+                    "summary": summary[:300] + "...", # 長すぎるのでカット
+                    "authors": ", ".join(authors),
+                    "source": "arXiv"
+                })
+                
+            return results
+
+        except Exception as e:
+            print(f"Error in arXiv Search: {e}")
+            return []
+
+    def generate_html_report(self, query, google_results, arxiv_results):
+        """検索結果をHTMLファイルにまとめる"""
+        html_template = f"""<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Research Report: {query}</title>
+    <style>
+        body {{ font-family: sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; line-height: 1.6; color: #333; }}
+        h1 {{ border-bottom: 3px solid #3b82f6; padding-bottom: 0.5rem; color: #1e3a8a; }}
+        h2 {{ margin-top: 2.5rem; color: #2563eb; border-left: 5px solid #3b82f6; padding-left: 10px; }}
+        .card {{ background: #fff; padding: 1.5rem; margin-bottom: 1rem; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
+        .title {{ font-size: 1.25rem; font-weight: bold; margin-bottom: 0.5rem; }}
+        .title a {{ color: #2563eb; text-decoration: none; }}
+        .meta {{ font-size: 0.9rem; color: #6b7280; margin-bottom: 0.5rem; }}
+        .summary {{ margin-top: 0.5rem; }}
+    </style>
+</head>
+<body>
+    <h1>Research Report</h1>
+    <p><strong>Topic:</strong> {query} | <strong>Date:</strong> {time.strftime('%Y-%m-%d')}</p>
+
+    <h2>Google Search Results</h2>
+    {''.join([f'<div class="card"><div class="title"><a href="{r["url"]}" target="_blank">{r["title"]}</a></div><div class="meta">{r["url"]}</div><div class="summary">{r["summary"]}</div></div>' for r in google_results]) if google_results else '<p>No results found.</p>'}
+
+    <h2>arXiv Papers</h2>
+    {''.join([f'<div class="card"><div class="title"><a href="{r["url"]}" target="_blank">{r["title"]}</a></div><div class="meta"><strong>Authors:</strong> {r.get("authors", "")}</div><div class="summary">{r["summary"]}</div></div>' for r in arxiv_results]) if arxiv_results else '<p>No results found.</p>'}
+    
+    <div style="margin-top: 50px; text-align: center; color: #888; font-size: 0.8rem;">
+        Generated by Python Research Aggregator
+    </div>
+</body>
+</html>"""
+
+        filename = f"report_{query.replace(' ', '_')}.html"
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(html_template)
+        print(f"\\nReport generated successfully: {filename}")
+
+    def run(self):
+        print("=== Python Research Aggregator ===")
+        if "YOUR_API_KEY_HERE" in self.client._api_key:
+             print("Error: API Keyが設定されていません。コード内の 'GEMINI_API_KEY' を設定してください。")
+             return
+
+        query = input("Enter research topic: ").strip()
+        if not query:
+            return
+
+        # 検索実行
+        g_results = self.search_google(query)
+        a_results = self.search_arxiv(query)
+
+        # レポート作成
+        self.generate_html_report(query, g_results, a_results)
+
+if __name__ == "__main__":
+    app = ResearchAggregator(api_key=GEMINI_API_KEY)
+    app.run()
+`;
+                els.pythonCodeContent.textContent = pythonCode;
+                toggleModal(els.modalPython, true);
+            } catch (e) {
+                console.error("Error loading python code", e);
+            }
+        });
+
+        els.btnClosePython.addEventListener('click', () => toggleModal(els.modalPython, false));
+        els.btnCopyPython.addEventListener('click', () => {
+            navigator.clipboard.writeText(els.pythonCodeContent.textContent);
+            const originalText = els.btnCopyPython.textContent;
+            els.btnCopyPython.textContent = "コピーしました！";
+            setTimeout(() => els.btnCopyPython.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg> コードをコピー`, 2000);
+        });
+    </script>
+</body>
+</html>
