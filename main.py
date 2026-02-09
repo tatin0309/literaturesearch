@@ -2,18 +2,17 @@ import os
 import time
 import requests
 import xml.etree.ElementTree as ET
+from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-# ==========================================
-# 設定エリア: APIキーを入力してください
-# ==========================================
-# Google Gemini API Key (https://aistudio.google.com/)
-GEMINI_API_KEY = "YOUR_API_KEY_HERE"
-# ==========================================
+# .envファイルから環境変数を読み込む
+load_dotenv()
 
 class ResearchAggregator:
     def __init__(self, api_key):
+        if not api_key:
+            raise ValueError("API Key is not provided.")
         self.client = genai.Client(api_key=api_key)
 
     def search_google(self, query):
@@ -21,8 +20,9 @@ class ResearchAggregator:
         print(f"Searching Google for: {query}...")
         try:
             # Gemini 2.5 Flashモデルで検索ツールを使用
+            # 注意: モデル名やパラメータはAPIの仕様変更により変わる可能性があります
             response = self.client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.0-flash",
                 contents=f"Find 5 high-quality, relevant web pages or PDFs regarding: '{query}'. Return the results as a list.",
                 config=types.GenerateContentConfig(
                     tools=[types.Tool(google_search=types.GoogleSearch())]
@@ -31,7 +31,7 @@ class ResearchAggregator:
             
             results = []
             # Grounding Metadataから検索結果を抽出
-            if response.candidates and response.candidates[0].grounding_metadata.grounding_chunks:
+            if response.candidates and response.candidates[0].grounding_metadata and response.candidates[0].grounding_metadata.grounding_chunks:
                 for chunk in response.candidates[0].grounding_metadata.grounding_chunks:
                     if chunk.web and chunk.web.uri and chunk.web.title:
                         results.append({
@@ -67,8 +67,10 @@ class ResearchAggregator:
 
             for entry in root.findall('atom:entry', ns):
                 title = entry.find('atom:title', ns).text.replace('\n', ' ').strip()
-                summary = entry.find('atom:summary', ns).text.replace('\n', ' ').strip()
-                link = entry.find('atom:id', ns).text
+                summary_elem = entry.find('atom:summary', ns)
+                summary = summary_elem.text.replace('\n', ' ').strip() if summary_elem is not None else "No summary available."
+                link_elem = entry.find('atom:id', ns)
+                link = link_elem.text if link_elem is not None else ""
                 
                 authors = []
                 for author in entry.findall('atom:author', ns):
@@ -78,7 +80,7 @@ class ResearchAggregator:
                 results.append({
                     "title": title,
                     "url": link,
-                    "summary": summary[:300] + "...", # 長すぎるのでカット
+                    "summary": (summary[:300] + "...") if len(summary) > 300 else summary,
                     "authors": ", ".join(authors),
                     "source": "arXiv"
                 })
@@ -91,6 +93,22 @@ class ResearchAggregator:
 
     def generate_html_report(self, query, google_results, arxiv_results):
         """検索結果をHTMLファイルにまとめる"""
+        current_date = time.strftime('%Y-%m-%d')
+        # リスト内包表記でのHTML生成を見やすく修正
+        google_html = ""
+        if google_results:
+            for r in google_results:
+                google_html += f'<div class="card"><div class="title"><a href="{r["url"]}" target="_blank">{r["title"]}</a></div><div class="meta">{r["url"]}</div><div class="summary">{r["summary"]}</div></div>'
+        else:
+            google_html = '<p>No results found.</p>'
+
+        arxiv_html = ""
+        if arxiv_results:
+            for r in arxiv_results:
+                arxiv_html += f'<div class="card"><div class="title"><a href="{r["url"]}" target="_blank">{r["title"]}</a></div><div class="meta"><strong>Authors:</strong> {r.get("authors", "")}</div><div class="summary">{r["summary"]}</div></div>'
+        else:
+            arxiv_html = '<p>No results found.</p>'
+
         html_template = f"""<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -109,13 +127,13 @@ class ResearchAggregator:
 </head>
 <body>
     <h1>Research Report</h1>
-    <p><strong>Topic:</strong> {query} | <strong>Date:</strong> {time.strftime('%Y-%m-%d')}</p>
+    <p><strong>Topic:</strong> {query} | <strong>Date:</strong> {current_date}</p>
 
     <h2>Google Search Results</h2>
-    {''.join([f'<div class="card"><div class="title"><a href="{r["url"]}" target="_blank">{r["title"]}</a></div><div class="meta">{r["url"]}</div><div class="summary">{r["summary"]}</div></div>' for r in google_results]) if google_results else '<p>No results found.</p>'}
+    {google_html}
 
     <h2>arXiv Papers</h2>
-    {''.join([f'<div class="card"><div class="title"><a href="{r["url"]}" target="_blank">{r["title"]}</a></div><div class="meta"><strong>Authors:</strong> {r.get("authors", "")}</div><div class="summary">{r["summary"]}</div></div>' for r in arxiv_results]) if arxiv_results else '<p>No results found.</p>'}
+    {arxiv_html}
     
     <div style="margin-top: 50px; text-align: center; color: #888; font-size: 0.8rem;">
         Generated by Python Research Aggregator
@@ -124,18 +142,20 @@ class ResearchAggregator:
 </html>"""
 
         filename = f"report_{query.replace(' ', '_')}.html"
-        with open(filename, "w", encoding="utf-8") as f:
-            f.write(html_template)
-        print(f"\nReport generated successfully: {filename}")
+        try:
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write(html_template)
+            print(f"\nReport generated successfully: {filename}")
+        except Exception as e:
+            print(f"Error writing report file: {e}")
 
     def run(self):
         print("=== Python Research Aggregator ===")
-        if "YOUR_API_KEY_HERE" in self.client._api_key:
-             print("Error: API Keyが設定されていません。コード内の 'GEMINI_API_KEY' を設定してください。")
-             return
-
+        # APIキーのチェックは __init__ で行われるため、ここでは try-catch でエラーを表示
+        
         query = input("Enter research topic: ").strip()
         if not query:
+            print("Query is empty. Exiting.")
             return
 
         # 検索実行
@@ -146,5 +166,17 @@ class ResearchAggregator:
         self.generate_html_report(query, g_results, a_results)
 
 if __name__ == "__main__":
-    app = ResearchAggregator(api_key=GEMINI_API_KEY)
-    app.run()
+    # 環境変数からAPIキーを取得
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+    if not GEMINI_API_KEY:
+        print("Error: 環境変数 'GEMINI_API_KEY' が見つかりません。")
+        print(".env ファイルを作成し、GEMINI_API_KEY=your_api_key_here を記述してください。")
+    else:
+        try:
+            app = ResearchAggregator(api_key=GEMINI_API_KEY)
+            app.run()
+        except ValueError as e:
+            print(f"Error: {e}")
+        except Exception as e:
+            print(f"Unexpected Error: {e}")
