@@ -1,0 +1,7 @@
+# 既存の記述
+.env
+__pycache__/
+.venv/
+
+# 変更点：HTMLファイル単体ではなく、reportsフォルダごと無視する
+reports/
